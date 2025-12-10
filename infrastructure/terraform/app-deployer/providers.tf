@@ -7,33 +7,26 @@ terraform {
   required_providers {
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = ">= 2.20.0"
+      version = "~> 2.20"
     }
     helm = {
       source  = "hashicorp/helm"
-      version = ">= 2.10.0"
+      version = "~> 2.12"
     }
   }
 }
 
 # Kubernetes Provider
-# Uses default kubeconfig or can be configured via variables
 provider "kubernetes" {
-  # Default: Uses ~/.kube/config or KUBECONFIG environment variable
-  # For production, configure explicitly:
-  # config_path    = var.kubeconfig_path
-  # config_context = var.kubeconfig_context
+  config_path    = "~/.kube/config"
+  config_context = "minikube"
 }
 
-# Helm Provider
-# Automatically inherits Kubernetes connection settings from kubeconfig
+# Helm Provider (v2.x syntax with nested kubernetes block)
 provider "helm" {
-  # Default: Uses ~/.kube/config or KUBECONFIG environment variable
-  # For explicit configuration, uncomment:
-  # registry {
-  #   url      = "oci://registry.example.com"
-  #   username = "username"
-  #   password = "password"
-  # }
+  kubernetes {
+    config_path    = "~/.kube/config"
+    config_context = "minikube"
+  }
 }
 

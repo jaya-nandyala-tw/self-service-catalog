@@ -145,8 +145,8 @@ resource "helm_release" "app" {
   chart      = var.helm_chart_path
   
   timeout    = var.helm_timeout
-  atomic     = var.helm_atomic
-  wait       = var.helm_wait
+  atomic     = false  # Disabled for testing - set to var.helm_atomic in production
+  wait       = false  # Disabled for testing - set to var.helm_wait in production
   
   # Pass the transformed values to the Helm chart
   values = [
