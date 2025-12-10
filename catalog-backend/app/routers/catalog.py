@@ -1,19 +1,21 @@
 """
 Catalog API router.
 
-Provides endpoints for listing and syncing the app catalog.
+Provides endpoints for listing, syncing, and building the app catalog.
 """
 import logging
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_session
-from app.models import AppCatalog, AppCatalogRead
+from app.models import AppCatalog, AppCatalogRead, BuildStatus
 from app.services.scanner import ScanResult, sync_catalog
+from app.services.terraform_service import build_app_images
 
 logger = logging.getLogger(__name__)
 
@@ -142,4 +144,87 @@ async def sync_catalog_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Catalog sync failed: {str(e)}",
         )
+
+
+@router.post(
+    "/{slug}/build",
+    response_model=dict,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Build Docker images for an app",
+    description=(
+        "Triggers building of Docker images for all components of an app. "
+        "This pre-builds images so that workspace spin-up is faster. "
+        "The build happens asynchronously in the background."
+    ),
+)
+async def build_app(
+    slug: str,
+    background_tasks: BackgroundTasks,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """
+    Build Docker images for an application.
+    
+    This endpoint:
+    1. Looks up the app by slug
+    2. Sets build_status to BUILDING
+    3. Triggers async image building in background
+    4. Returns immediately with 202 Accepted
+    
+    Args:
+        slug: The unique slug of the application
+        background_tasks: FastAPI background tasks (injected)
+        session: Database session (injected)
+        
+    Returns:
+        Confirmation that build has been initiated
+        
+    Raises:
+        HTTPException: If the app is not found or already building
+    """
+    logger.info(f"Build request for app: {slug}")
+    
+    # Look up the app
+    stmt = select(AppCatalog).where(
+        AppCatalog.slug == slug,
+        AppCatalog.is_active == True,  # noqa: E712
+    )
+    result = await session.execute(stmt)
+    app = result.scalar_one_or_none()
+    
+    if not app:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"App with slug '{slug}' not found or inactive",
+        )
+    
+    # Check if already building
+    if app.build_status == BuildStatus.BUILDING.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Build is already in progress for this app",
+        )
+    
+    # Update status to BUILDING
+    app.build_status = BuildStatus.BUILDING.value
+    app.updated_at = datetime.utcnow()
+    session.add(app)
+    await session.commit()
+    
+    logger.info(f"Set build_status to BUILDING for app {slug}")
+    
+    # Trigger build in background
+    background_tasks.add_task(
+        build_app_images,
+        app.id,
+        app.manifest_payload,
+    )
+    
+    logger.info(f"Background build task queued for app {slug}")
+    
+    return {
+        "status": "accepted",
+        "message": f"Build initiated for '{slug}'",
+        "slug": slug,
+    }
 

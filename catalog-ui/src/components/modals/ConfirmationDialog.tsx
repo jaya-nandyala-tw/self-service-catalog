@@ -174,15 +174,25 @@ export function ConfirmationDialog({
 
         <DialogFooter className="gap-2">
           <Button
+            type="button"
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onOpenChange(false);
+            }}
             disabled={isLoading}
           >
             Cancel
           </Button>
           <Button
+            type="button"
             className={cn("gap-2", config.buttonClass)}
-            onClick={onConfirm}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onConfirm();
+            }}
             disabled={isLoading}
           >
             {isLoading ? (

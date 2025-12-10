@@ -24,11 +24,14 @@ export interface CatalogItem {
   repo_path: string;
   manifest_payload: AppManifest;
   is_active: boolean;
+  build_status: BuildStatus;
   created_at: string;
   updated_at: string;
 }
 
-export type WorkspaceStatus = "PROVISIONING" | "RUNNING" | "FAILED" | "DESTROYED";
+export type WorkspaceStatus = "PROVISIONING" | "RUNNING" | "DESTROYING" | "FAILED" | "DESTROYED";
+
+export type BuildStatus = "NOT_BUILT" | "BUILDING" | "BUILT" | "FAILED";
 
 export interface Workspace {
   id: string;

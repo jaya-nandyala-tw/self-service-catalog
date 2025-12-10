@@ -1,163 +1,103 @@
 # Self-Service Catalog
 
-An Internal Developer Platform (IDP) that enables developers to discover, browse, and deploy applications from a centralized catalog. The platform uses a manifest-driven approach where applications define their topology through configuration files.
+A developer platform for one-click application deployments to Kubernetes.
 
-## Architecture Overview
+![Platform Overview](https://img.shields.io/badge/Platform-Internal%20Developer%20Platform-blue)
+![Stack](https://img.shields.io/badge/Stack-Next.js%20%7C%20FastAPI%20%7C%20Terraform-green)
+![License](https://img.shields.io/badge/License-MIT-yellow)
 
+## Features
+
+- 🚀 **One-Click Deployments** - Deploy apps with a single button click
+- 📦 **Universal Infrastructure** - Any app topology from JSON manifest
+- 🔄 **Auto Image Building** - Builds Docker images on-demand
+- 🌐 **Local DNS** - Access apps via `app-name.local` domains
+- 🎨 **Modern UI** - Beautiful dark-themed catalog interface
+
+## Prerequisites
+
+- Docker Desktop
+- Minikube
+- kubectl
+- Terraform
+- Node.js 18+
+- Python 3.11+
+
+## Quick Start
+
+### 1. One-Time Setup
+
+```bash
+# Clone and enter the project
+cd self-service-catalog
+
+# Run setup (requires sudo for /etc/hosts)
+./setup.sh
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           Self-Service Catalog                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ┌──────────────┐      ┌──────────────────┐      ┌───────────────────────┐  │
-│  │              │      │                  │      │                       │  │
-│  │  Catalog UI  │─────▶│  Catalog Backend │─────▶│  PostgreSQL Database  │  │
-│  │  (Next.js)   │      │  (FastAPI)       │      │                       │  │
-│  │  Port: 3000  │      │  Port: 8000      │      │  Port: 5432           │  │
-│  │              │      │                  │      │                       │  │
-│  └──────────────┘      └────────┬─────────┘      └───────────────────────┘  │
-│                                 │                                           │
-│                                 ▼                                           │
-│                        ┌──────────────────┐                                 │
-│                        │                  │                                 │
-│                        │   /apps folder   │  ◀── Source of Truth            │
-│                        │  (app-manifests) │                                 │
-│                        │                  │                                 │
-│                        └──────────────────┘                                 │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+
+This will:
+- Start minikube and enable ingress
+- Start PostgreSQL and Docker registry containers
+- Install Python and Node.js dependencies
+- Configure local DNS entries
+
+### 2. Start the Platform
+
+```bash
+./start.sh
 ```
+
+### 3. Open the Catalog
+
+Visit **http://localhost:3000** in your browser.
+
+### 4. Deploy an App
+
+1. Browse the catalog
+2. Click on an app (e.g., "Social Platform")
+3. Click **Spin Up**
+4. Wait for deployment (watch the status)
+5. Click the access URL when ready
+
+## Scripts
+
+| Script | Purpose | Requires Sudo |
+|--------|---------|---------------|
+| `./setup.sh` | One-time setup, DNS config | Yes |
+| `./start.sh` | Start backend & frontend | No |
+| `./stop.sh` | Stop servers (preserves state) | No |
+| `./cleanup.sh` | Full cleanup including DNS | Yes |
 
 ## Project Structure
 
 ```
-self-service-catalog/
-├── apps/                      # Application definitions (source of truth)
-│   ├── blog-platform/         # Example: Simple blog API
-│   │   ├── api/
-│   │   │   └── Dockerfile
-│   │   └── app-manifest.json
-│   └── ecommerce/             # Example: Full-stack e-commerce
-│       ├── frontend/
-│       │   └── Dockerfile
-│       ├── backend/
-│       │   └── Dockerfile
-│       ├── worker/
-│       │   └── Dockerfile
-│       └── app-manifest.json
-├── catalog-backend/           # FastAPI backend service
-│   ├── app/
-│   │   ├── main.py           # Application entry point
-│   │   ├── config.py         # Configuration management
-│   │   ├── database.py       # Async PostgreSQL setup
-│   │   ├── models.py         # SQLModel database models
-│   │   ├── routers/          # API route handlers
-│   │   └── services/         # Business logic
-│   ├── alembic/              # Database migrations
-│   └── requirements.txt
-├── catalog-ui/                # Next.js frontend
-│   ├── src/
-│   │   ├── app/              # Next.js App Router pages
-│   │   ├── components/       # React components
-│   │   ├── lib/              # API client & utilities
-│   │   └── providers/        # React context providers
-│   └── package.json
-└── README.md                  # This file
+├── apps/                    # App definitions (manifests + Dockerfiles)
+├── catalog-backend/         # FastAPI backend (port 8000)
+├── catalog-ui/              # Next.js frontend (port 3000)
+├── infrastructure/          # Helm charts & Terraform modules
+└── placeholder-apps/        # Default images for testing
 ```
 
-## Features
+## Adding a New App
 
-- **Application Catalog**: Browse all available applications with their topology
-- **Manifest-Driven**: Applications define their components via `app-manifest.json`
-- **Visual Topology**: See component relationships and dependencies
-- **Workspace Management**: Create and manage developer workspaces
-- **Auto-Sync**: Automatically scan and sync applications from the apps directory
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.10+
-- Node.js 18+
-- PostgreSQL 14+ (or Docker)
-- Git
-
-### 1. Start PostgreSQL
-
-Using Docker:
-
-```bash
-docker run -d \
-  --name catalog-postgres \
-  -e POSTGRES_USER=catalog_user \
-  -e POSTGRES_PASSWORD=catalog_password \
-  -e POSTGRES_DB=catalog_db \
-  -p 5432:5432 \
-  postgres:16-alpine
+1. Create a folder in `apps/`:
+```
+apps/my-app/
+├── app-manifest.json
+├── frontend/
+│   └── Dockerfile
+└── backend/
+    └── Dockerfile
 ```
 
-Or use an existing PostgreSQL instance and create the database:
-
-```sql
-CREATE DATABASE catalog_db;
-CREATE USER catalog_user WITH PASSWORD 'catalog_password';
-GRANT ALL PRIVILEGES ON DATABASE catalog_db TO catalog_user;
-```
-
-### 2. Start the Backend
-
-```bash
-cd catalog-backend
-
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run database migrations (optional, tables auto-create)
-alembic upgrade head
-
-# Start the server
-uvicorn app.main:app --reload
-```
-
-The API will be available at http://localhost:8000
-
-### 3. Start the Frontend
-
-```bash
-cd catalog-ui
-
-# Install dependencies
-npm install
-
-# Start the development server
-npm run dev
-```
-
-The UI will be available at http://localhost:3000
-
-### 4. Sync the Catalog
-
-Once both services are running:
-
-1. Open http://localhost:3000
-2. Click "Sync Catalog" in the sidebar
-3. The applications from the `apps/` directory will appear in the catalog
-
-## App Manifest Schema
-
-Each application must have an `app-manifest.json` file defining its topology:
-
+2. Define the manifest:
 ```json
 {
-  "appName": "My Application",
-  "description": "A description of what this app does",
+  "appName": "My App",
+  "description": "Description here",
   "components": [
     {
-      "name": "frontend",
+      "name": "web",
       "type": "frontend",
       "path": "./frontend",
       "port": 3000
@@ -167,170 +107,72 @@ Each application must have an `app-manifest.json` file defining its topology:
       "type": "backend",
       "path": "./backend",
       "port": 8080
-    },
-    {
-      "name": "worker",
-      "type": "worker",
-      "path": "./worker",
-      "port": 5555
     }
   ]
 }
 ```
 
-### Component Types
-
-| Type | Description |
-|------|-------------|
-| `frontend` | UI/web client applications |
-| `backend` | API servers and services |
-| `worker` | Background job processors |
-
-### Validation Rules
-
-1. Each component must have a `Dockerfile` at its specified path
-2. Component names must be unique within an app
-3. Ports must be valid (1-65535)
-
-## API Documentation
-
-When the backend is running:
-
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **OpenAPI JSON**: http://localhost:8000/openapi.json
-
-### Key Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/v1/catalog` | List all apps in the catalog |
-| `GET` | `/api/v1/catalog/{slug}` | Get a specific app by slug |
-| `POST` | `/api/v1/catalog/sync` | Trigger a catalog sync |
-| `GET` | `/api/v1/workspaces` | List all workspaces |
-| `POST` | `/api/v1/workspaces` | Create a new workspace |
-| `DELETE` | `/api/v1/workspaces/{id}` | Destroy a workspace |
-
-## Configuration
-
-### Backend Environment Variables
-
-Create a `.env` file in `catalog-backend/`:
-
-```env
-# Application
-APP_NAME=Catalog Service
-APP_VERSION=1.0.0
-DEBUG=true
-
-# Database
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_USER=catalog_user
-POSTGRES_PASSWORD=catalog_password
-POSTGRES_DB=catalog_db
-
-# Apps Directory
-APPS_DIR=../apps
-```
-
-### Frontend Environment Variables
-
-Create a `.env.local` file in `catalog-ui/`:
-
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
-## Adding New Applications
-
-1. Create a new folder under `apps/`:
-   ```bash
-   mkdir -p apps/my-new-app/service
-   ```
-
-2. Add a `Dockerfile` for each component:
-   ```bash
-   touch apps/my-new-app/service/Dockerfile
-   ```
-
-3. Create the `app-manifest.json`:
-   ```json
-   {
-     "appName": "My New App",
-     "description": "Description of my new application",
-     "components": [
-       {
-         "name": "service",
-         "type": "backend",
-         "path": "./service",
-         "port": 8080
-       }
-     ]
-   }
-   ```
-
-4. Sync the catalog via the UI or API:
-   ```bash
-   curl -X POST http://localhost:8000/api/v1/catalog/sync
-   ```
-
-## Tech Stack
-
-### Backend
-- **Language**: Python 3.10+
-- **Framework**: FastAPI
-- **Database**: PostgreSQL (async with asyncpg)
-- **ORM**: SQLModel (Pydantic + SQLAlchemy)
-- **Migrations**: Alembic
-
-### Frontend
-- **Framework**: Next.js 14 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Components**: shadcn/ui
-- **State Management**: TanStack Query
-- **HTTP Client**: Axios
-
-## Development
-
-### Running Tests
-
+3. Run setup to add DNS:
 ```bash
-# Backend
-cd catalog-backend
-pytest
-
-# Frontend
-cd catalog-ui
-npm test
+./setup.sh
 ```
 
-### Creating Database Migrations
-
-```bash
-cd catalog-backend
-alembic revision --autogenerate -m "Description of changes"
-alembic upgrade head
-```
+4. Sync catalog in UI (Settings → Re-sync Catalog)
 
 ## Troubleshooting
 
-### "Failed to load catalog"
-- Ensure the backend is running on port 8000
-- Check that PostgreSQL is running and accessible
-- Verify CORS is enabled (configured by default)
+### App won't start (ImagePullBackOff)
 
-### "Apps directory does not exist"
-- Verify the `APPS_DIR` environment variable points to the correct path
-- Default is `../apps` (relative to catalog-backend)
+```bash
+# Reload images into minikube
+minikube image load localhost:5000/app-name-component:latest
+kubectl rollout restart deployment -n ws-{workspace-id}
+```
 
-### Database Connection Errors
-- Ensure PostgreSQL is running: `docker ps`
-- Check credentials in `.env` file
-- Verify the database exists: `psql -U catalog_user -d catalog_db`
+### Can't access app URL
+
+```bash
+# Check if port-forward is running
+lsof -i :3001
+
+# Restart manually if needed
+kubectl port-forward -n ws-{id} svc/app-name-web 3001:3000
+```
+
+### DNS not working
+
+```bash
+# Verify hosts entry exists
+grep "app-name.local" /etc/hosts
+
+# Re-run setup if missing
+./setup.sh
+```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/catalog` | GET | List all apps |
+| `/api/v1/catalog/sync` | POST | Sync from filesystem |
+| `/api/v1/workspaces` | GET | List workspaces |
+| `/api/v1/workspaces` | POST | Create workspace |
+| `/api/v1/workspaces/{id}` | DELETE | Destroy workspace |
+| `/api/v1/workspaces?confirm=true` | DELETE | Destroy all |
+
+API docs: http://localhost:8000/docs
+
+## Architecture
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed design documentation.
+
+## Tech Stack
+
+- **Frontend**: Next.js 14, React Query, Tailwind CSS, shadcn/ui
+- **Backend**: FastAPI, SQLAlchemy, PostgreSQL
+- **Infrastructure**: Terraform, Helm, Kubernetes (minikube)
+- **Containers**: Docker, local registry
 
 ## License
 
-Internal use only.
-
+MIT

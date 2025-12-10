@@ -50,6 +50,13 @@ const statusConfig: Record<
     bgColor: "bg-emerald-500/20 border-emerald-500/30",
     label: "Running",
   },
+  DESTROYING: {
+    icon: Loader2,
+    color: "text-orange-400",
+    bgColor: "bg-orange-500/20 border-orange-500/30",
+    label: "Destroying",
+    animate: true,
+  },
   FAILED: {
     icon: XCircle,
     color: "text-red-400",
@@ -142,8 +149,8 @@ export default function WorkspacesPage() {
 
       {/* Stats */}
       {workspaces && workspaces.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8 animate-fade-in stagger-1" style={{ animationFillMode: "forwards", opacity: 0 }}>
-          {(["RUNNING", "PROVISIONING", "FAILED", "DESTROYED"] as WorkspaceStatus[]).map(
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8 animate-fade-in stagger-1" style={{ animationFillMode: "forwards", opacity: 0 }}>
+          {(["RUNNING", "PROVISIONING", "DESTROYING", "FAILED", "DESTROYED"] as WorkspaceStatus[]).map(
             (status) => {
               const config = statusConfig[status];
               const count = workspaces.filter((w) => w.status === status).length;
@@ -326,17 +333,20 @@ export default function WorkspacesPage() {
                             onClick={() => deleteMutation.mutate(workspace.id)}
                             disabled={
                               deleteMutation.isPending ||
-                              workspace.status === "DESTROYED"
+                              workspace.status === "DESTROYED" ||
+                              workspace.status === "DESTROYING"
                             }
                           >
-                            {deleteMutation.isPending ? (
+                            {deleteMutation.isPending || workspace.status === "DESTROYING" ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
                               <Trash2 className="h-4 w-4" />
                             )}
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Destroy workspace</TooltipContent>
+                        <TooltipContent>
+                          {workspace.status === "DESTROYING" ? "Destroying..." : "Destroy workspace"}
+                        </TooltipContent>
                       </Tooltip>
                     </TableCell>
                   </TableRow>

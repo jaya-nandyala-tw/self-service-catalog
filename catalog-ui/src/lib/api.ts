@@ -35,6 +35,11 @@ export async function syncCatalog(): Promise<{ status: string; message: string }
   return response.data;
 }
 
+export async function buildAppImages(slug: string): Promise<{ status: string; message: string; slug: string }> {
+  const response = await apiClient.post(`/api/v1/catalog/${slug}/build`);
+  return response.data;
+}
+
 // ============================================================================
 // Workspaces API
 // ============================================================================
@@ -58,6 +63,18 @@ export async function createWorkspace(
 
 export async function deleteWorkspace(id: string): Promise<void> {
   await apiClient.delete(`/api/v1/workspaces/${id}`);
+}
+
+export interface DestroyAllResponse {
+  status: string;
+  message: string;
+}
+
+export async function destroyAll(): Promise<DestroyAllResponse> {
+  const response = await apiClient.delete<DestroyAllResponse>(
+    "/api/v1/workspaces?confirm=true"
+  );
+  return response.data;
 }
 
 export { apiClient };

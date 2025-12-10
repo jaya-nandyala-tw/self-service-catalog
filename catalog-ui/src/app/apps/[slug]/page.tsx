@@ -22,8 +22,10 @@ import {
   XCircle,
   AlertTriangle,
   Boxes,
+  Hammer,
+  Package,
 } from "lucide-react";
-import { getCatalogItem, getWorkspaces, createWorkspace, deleteWorkspace } from "@/lib/api";
+import { buildAppImages, getCatalogItem, getWorkspaces, createWorkspace, deleteWorkspace } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -85,6 +87,13 @@ const statusConfig: Record<
     bgColor: "bg-emerald-100 dark:bg-emerald-500/20 border-emerald-200 dark:border-emerald-500/30",
     label: "Running",
   },
+  DESTROYING: {
+    icon: Loader2,
+    color: "text-orange-600 dark:text-orange-400",
+    bgColor: "bg-orange-100 dark:bg-orange-500/20 border-orange-200 dark:border-orange-500/30",
+    label: "Destroying",
+    animate: true,
+  },
   FAILED: {
     icon: XCircle,
     color: "text-red-600 dark:text-red-400",
@@ -138,6 +147,16 @@ export default function AppDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       setDestroyDialogOpen(false);
     },
+    onError: () => {
+      setDestroyDialogOpen(false);
+    },
+  });
+
+  const buildMutation = useMutation({
+    mutationFn: () => buildAppImages(slug),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["catalog", slug] });
+    },
   });
 
   // Get workspaces for this app
@@ -145,12 +164,20 @@ export default function AppDetailPage() {
     ? workspaces?.filter((w) => w.catalog_id === item.id) ?? []
     : [];
   const activeWorkspaces = appWorkspaces.filter(
-    (w) => w.status === "RUNNING" || w.status === "PROVISIONING"
+    (w) => w.status === "RUNNING" || w.status === "PROVISIONING" || w.status === "DESTROYING"
   );
   const runningWorkspace = appWorkspaces.find((w) => w.status === "RUNNING");
   const provisioningWorkspace = appWorkspaces.find((w) => w.status === "PROVISIONING");
+  const destroyingWorkspace = appWorkspaces.find((w) => w.status === "DESTROYING");
 
-  const isLoading2 = deployMutation.isPending || destroyMutation.isPending;
+  const isLoading2 = deployMutation.isPending || destroyMutation.isPending || buildMutation.isPending;
+  const buildStatus = item?.build_status || "NOT_BUILT";
+  const isBuilt = buildStatus === "BUILT";
+  const isBuilding = buildStatus === "BUILDING" || buildMutation.isPending;
+
+  const handleBuildClick = () => {
+    buildMutation.mutate();
+  };
 
   const handleSpinUpClick = () => {
     setSpinUpDialogOpen(true);
@@ -165,8 +192,15 @@ export default function AppDetailPage() {
   };
 
   const handleDestroyConfirm = () => {
-    if (runningWorkspace) {
-      destroyMutation.mutate(runningWorkspace.id);
+    // Find the workspace to destroy - could be RUNNING or still showing after state update
+    const workspaceToDestroy = appWorkspaces.find(
+      (w) => w.status === "RUNNING" || w.status === "PROVISIONING"
+    );
+    
+    if (workspaceToDestroy) {
+      destroyMutation.mutate(workspaceToDestroy.id);
+    } else {
+      setDestroyDialogOpen(false);
     }
   };
 
@@ -230,13 +264,23 @@ export default function AppDetailPage() {
 
           {/* Action buttons - Toggle based on workspace state */}
           <div className="flex items-center gap-3 shrink-0">
-            {runningWorkspace ? (
+            {destroyingWorkspace ? (
+              <Button
+                variant="outline"
+                size="lg"
+                className="gap-2 border-orange-300 dark:border-orange-500/50 text-orange-700 dark:text-orange-300"
+                disabled
+              >
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Destroying...
+              </Button>
+            ) : runningWorkspace ? (
               <>
                 {/* Open App button */}
                 <Button
                   variant="outline"
                   size="lg"
-                  className="gap-2"
+                  className="gap-2 border-emerald-300 dark:border-emerald-500/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 hover:border-emerald-400 dark:hover:border-emerald-400/60"
                   onClick={() => window.open(runningWorkspace.access_url || "#", "_blank")}
                 >
                   <ExternalLink className="h-5 w-5" />
@@ -247,7 +291,7 @@ export default function AppDetailPage() {
                 <Button
                   variant="outline"
                   size="lg"
-                  className="gap-2 text-destructive hover:bg-destructive hover:text-destructive-foreground border-destructive/50"
+                  className="gap-2 text-red-600 dark:text-red-400 border-red-300 dark:border-red-500/50 hover:bg-red-100 dark:hover:bg-red-500/20 hover:border-red-400 dark:hover:border-red-400/60"
                   onClick={handleDestroyClick}
                   disabled={isLoading2}
                 >
@@ -266,16 +310,62 @@ export default function AppDetailPage() {
                 Provisioning...
               </Button>
             ) : (
-              <Button
-                variant="glow"
-                size="lg"
-                onClick={handleSpinUpClick}
-                disabled={isLoading2}
-                className="gap-2"
-              >
-                <Rocket className="h-5 w-5" />
-                Spin Up Workspace
-              </Button>
+              <>
+                {/* Build button - show when not built */}
+                {!isBuilt && (
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className={cn(
+                      "gap-2",
+                      isBuilding 
+                        ? "border-amber-300 dark:border-amber-500/50 text-amber-700 dark:text-amber-300" 
+                        : "border-violet-300 dark:border-violet-500/50 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-500/20"
+                    )}
+                    onClick={handleBuildClick}
+                    disabled={isBuilding}
+                  >
+                    {isBuilding ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Building...
+                      </>
+                    ) : (
+                      <>
+                        <Hammer className="h-5 w-5" />
+                        Build Images
+                      </>
+                    )}
+                  </Button>
+                )}
+                
+                {/* Built badge */}
+                {isBuilt && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
+                        <Package className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Images Built</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <p>Docker images are pre-built and ready for fast deployment</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                
+                {/* Spin Up button */}
+                <Button
+                  variant="glow"
+                  size="lg"
+                  onClick={handleSpinUpClick}
+                  disabled={isLoading2}
+                  className="gap-2"
+                >
+                  <Rocket className="h-5 w-5" />
+                  Spin Up Workspace
+                </Button>
+              </>
             )}
           </div>
         </div>

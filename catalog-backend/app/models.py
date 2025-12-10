@@ -20,8 +20,17 @@ class WorkspaceStatus(str, Enum):
     """Status states for a workspace instance."""
     PROVISIONING = "PROVISIONING"
     RUNNING = "RUNNING"
+    DESTROYING = "DESTROYING"
     FAILED = "FAILED"
     DESTROYED = "DESTROYED"
+
+
+class BuildStatus(str, Enum):
+    """Build status for application images."""
+    NOT_BUILT = "NOT_BUILT"
+    BUILDING = "BUILDING"
+    BUILT = "BUILT"
+    FAILED = "FAILED"
 
 
 class ComponentType(str, Enum):
@@ -72,6 +81,7 @@ class AppCatalogRead(SQLModel):
     repo_path: str
     manifest_payload: dict[str, Any]
     is_active: bool
+    build_status: str  # BuildStatus enum value
     created_at: datetime
     updated_at: datetime
 
@@ -138,6 +148,13 @@ class AppCatalog(SQLModel, table=True):
         default=True,
         nullable=False,
         description="Whether the app is currently active/valid",
+    )
+    
+    build_status: str = Field(
+        default="NOT_BUILT",
+        max_length=50,
+        nullable=False,
+        description="Build status of Docker images (NOT_BUILT, BUILDING, BUILT, FAILED)",
     )
     
     created_at: datetime = Field(

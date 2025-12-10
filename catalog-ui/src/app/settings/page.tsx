@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Settings,
   Server,
@@ -9,11 +11,25 @@ import {
   Code,
   ExternalLink,
   CheckCircle2,
+  AlertTriangle,
+  Trash2,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { destroyAll, syncCatalog } from "@/lib/api";
 
 const settingsSections = [
   {
@@ -63,8 +79,65 @@ const settingsSections = [
 ];
 
 export default function SettingsPage() {
+  const [destroyDialogOpen, setDestroyDialogOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const queryClient = useQueryClient();
+
+  const destroyMutation = useMutation({
+    mutationFn: destroyAll,
+    onSuccess: (data) => {
+      setDestroyDialogOpen(false);
+      setConfirmText("");
+      setStatusMessage({
+        type: "success",
+        text: "Destruction initiated! Cleaning up resources in background...",
+      });
+      // Clear message and refresh data after delay
+      setTimeout(() => {
+        setStatusMessage(null);
+        queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+        queryClient.invalidateQueries({ queryKey: ["catalog"] });
+      }, 5000);
+    },
+    onError: (error) => {
+      setStatusMessage({
+        type: "error",
+        text: `Error: ${error.message}`,
+      });
+      setTimeout(() => setStatusMessage(null), 5000);
+    },
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: syncCatalog,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["catalog"] });
+    },
+  });
+
   return (
     <div className="p-8">
+      {/* Status Message Banner */}
+      {statusMessage && (
+        <div
+          className={`mb-6 p-4 rounded-lg border animate-fade-in ${
+            statusMessage.type === "success"
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+              : "bg-red-500/10 border-red-500/30 text-red-300"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {statusMessage.type === "success" ? (
+              <CheckCircle2 className="h-5 w-5" />
+            ) : (
+              <AlertTriangle className="h-5 w-5" />
+            )}
+            <span>{statusMessage.text}</span>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-8 animate-fade-in">
         <div className="flex items-center gap-3 mb-2">
@@ -232,6 +305,116 @@ export default function SettingsPage() {
                 View Docs
               </Button>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Danger Zone */}
+      <Card
+        className="mt-6 border-red-500/30 bg-red-500/5 animate-slide-up opacity-0 stagger-5"
+        style={{ animationFillMode: "forwards" }}
+      >
+        <CardHeader>
+          <CardTitle className="text-base font-semibold flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-red-500 to-rose-600 shadow-lg shadow-red-500/25">
+              <AlertTriangle className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <span className="text-red-400">Danger Zone</span>
+              <CardDescription className="font-normal text-red-400/70">
+                Destructive actions - use with caution
+              </CardDescription>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between p-4 rounded-lg bg-red-500/10 border border-red-500/20">
+            <div>
+              <p className="text-sm font-medium text-red-300">Destroy All & Reset</p>
+              <p className="text-xs text-red-400/70 mt-1">
+                Destroys all Kubernetes workspaces, clears catalog data, removes DNS entries and port-forwards.
+                This action cannot be undone.
+              </p>
+            </div>
+            <Dialog open={destroyDialogOpen} onOpenChange={setDestroyDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="destructive" className="gap-2 shrink-0">
+                  <Trash2 className="h-4 w-4" />
+                  Destroy All
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-red-400">
+                    <AlertTriangle className="h-5 w-5" />
+                    Confirm Destruction
+                  </DialogTitle>
+                  <DialogDescription>
+                    This will permanently destroy all workspaces and reset the catalog.
+                    Type <strong className="text-red-400">DESTROY</strong> to confirm.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                  <input
+                    type="text"
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    placeholder="Type DESTROY to confirm"
+                    className="w-full px-3 py-2 bg-muted border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setDestroyDialogOpen(false);
+                      setConfirmText("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={confirmText !== "DESTROY" || destroyMutation.isPending}
+                    onClick={() => destroyMutation.mutate()}
+                  >
+                    {destroyMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Destroying...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Destroy Everything
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+          
+          <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30 border border-border/50">
+            <div>
+              <p className="text-sm font-medium">Re-sync Catalog</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Scan the apps directory and refresh the catalog database.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              className="gap-2 shrink-0"
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending}
+            >
+              {syncMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Sync Catalog
+            </Button>
           </div>
         </CardContent>
       </Card>

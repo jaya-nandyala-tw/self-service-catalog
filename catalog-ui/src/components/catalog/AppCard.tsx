@@ -18,6 +18,8 @@ import {
   XCircle,
   AlertTriangle,
   ExternalLink,
+  Hammer,
+  Package,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,8 +29,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ConfirmationDialog } from "@/components/modals/ConfirmationDialog";
-import { CatalogItem, ComponentType, Workspace, WorkspaceStatus } from "@/lib/types";
-import { createWorkspace, deleteWorkspace } from "@/lib/api";
+import { BuildStatus, CatalogItem, ComponentType, Workspace, WorkspaceStatus } from "@/lib/types";
+import { buildAppImages, createWorkspace, deleteWorkspace } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface AppCardProps {
@@ -84,6 +86,13 @@ const statusConfig: Record<
     bgColor: "bg-emerald-50 dark:bg-emerald-500/20 border-emerald-300 dark:border-emerald-500/30",
     label: "Running",
   },
+  DESTROYING: {
+    icon: Loader2,
+    color: "text-orange-700 dark:text-orange-300",
+    bgColor: "bg-orange-50 dark:bg-orange-500/20 border-orange-300 dark:border-orange-500/30",
+    label: "Destroying",
+    animate: true,
+  },
   FAILED: {
     icon: XCircle,
     color: "text-red-700 dark:text-red-300",
@@ -117,10 +126,11 @@ export function AppCard({ item, index, workspaces = [] }: AppCardProps) {
   // Get workspaces for this app
   const appWorkspaces = workspaces.filter((w) => w.catalog_id === item.id);
   const activeWorkspaces = appWorkspaces.filter(
-    (w) => w.status === "RUNNING" || w.status === "PROVISIONING"
+    (w) => w.status === "RUNNING" || w.status === "PROVISIONING" || w.status === "DESTROYING"
   );
   const runningWorkspace = appWorkspaces.find((w) => w.status === "RUNNING");
   const provisioningWorkspace = appWorkspaces.find((w) => w.status === "PROVISIONING");
+  const destroyingWorkspace = appWorkspaces.find((w) => w.status === "DESTROYING");
 
   // Determine the primary status to show
   const primaryWorkspace = runningWorkspace || provisioningWorkspace;
@@ -140,7 +150,23 @@ export function AppCard({ item, index, workspaces = [] }: AppCardProps) {
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       setDestroyDialogOpen(false);
     },
+    onError: () => {
+      setDestroyDialogOpen(false);
+    },
   });
+
+  const buildMutation = useMutation({
+    mutationFn: () => buildAppImages(item.slug),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["catalog"] });
+    },
+  });
+
+  const handleBuildClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    buildMutation.mutate();
+  };
 
   const handleSpinUpClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -159,8 +185,15 @@ export function AppCard({ item, index, workspaces = [] }: AppCardProps) {
   };
 
   const handleDestroyConfirm = () => {
-    if (runningWorkspace) {
-      destroyMutation.mutate(runningWorkspace.id);
+    // Find the workspace to destroy - could be RUNNING or still showing after state update
+    const workspaceToDestroy = appWorkspaces.find(
+      (w) => w.status === "RUNNING" || w.status === "PROVISIONING"
+    );
+    
+    if (workspaceToDestroy) {
+      destroyMutation.mutate(workspaceToDestroy.id);
+    } else {
+      setDestroyDialogOpen(false);
     }
   };
 
@@ -178,8 +211,11 @@ export function AppCard({ item, index, workspaces = [] }: AppCardProps) {
     }
   };
 
-  const isLoading = deployMutation.isPending || destroyMutation.isPending;
+  const isLoading = deployMutation.isPending || destroyMutation.isPending || buildMutation.isPending;
   const hasActiveWorkspace = !!primaryStatus;
+  const buildStatus = item.build_status || "NOT_BUILT";
+  const isBuilt = buildStatus === "BUILT";
+  const isBuilding = buildStatus === "BUILDING" || buildMutation.isPending;
 
   return (
     <>
@@ -299,13 +335,23 @@ export function AppCard({ item, index, workspaces = [] }: AppCardProps) {
 
             {/* Actions */}
             <div className="flex items-center gap-2 pt-3 border-t border-slate-200 dark:border-border/50">
-              {runningWorkspace ? (
+              {destroyingWorkspace ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-9 text-xs gap-1.5 font-medium border-orange-300 dark:border-orange-500/50"
+                  disabled
+                >
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-orange-600" />
+                  <span className="text-orange-600 dark:text-orange-400">Destroying...</span>
+                </Button>
+              ) : runningWorkspace ? (
                 <>
                   {/* Access button when running */}
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1 h-9 text-xs gap-1.5 font-medium border-slate-200 dark:border-border hover:bg-slate-50 dark:hover:bg-muted"
+                    className="flex-1 h-9 text-xs gap-1.5 font-medium border-emerald-300 dark:border-emerald-500/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/20 hover:border-emerald-400 dark:hover:border-emerald-400/60"
                     onClick={handleAccessClick}
                   >
                     <ExternalLink className="h-3.5 w-3.5" />
@@ -345,24 +391,70 @@ export function AppCard({ item, index, workspaces = [] }: AppCardProps) {
                   <span className="text-blue-600 dark:text-blue-400">Provisioning...</span>
                 </Button>
               ) : (
-                <Button
-                  size="sm"
-                  className="flex-1 h-9 text-xs gap-1.5 font-semibold bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white border-0 shadow-md shadow-cyan-500/20 hover:shadow-lg hover:shadow-cyan-500/30 transition-all"
-                  onClick={handleSpinUpClick}
-                  disabled={isLoading}
-                >
-                  {deployMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Deploying...
-                    </>
-                  ) : (
-                    <>
-                      <Rocket className="h-3.5 w-3.5" />
-                      Spin Up
-                    </>
+                <div className="flex items-center gap-2 flex-1">
+                  {/* Build button - show when not built */}
+                  {!isBuilt && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "h-9 text-xs gap-1.5 font-medium",
+                        isBuilding 
+                          ? "border-amber-300 dark:border-amber-500/50" 
+                          : "border-violet-300 dark:border-violet-500/50 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/20"
+                      )}
+                      onClick={handleBuildClick}
+                      disabled={isBuilding}
+                    >
+                      {isBuilding ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
+                          <span className="text-amber-600 dark:text-amber-400">Building...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Hammer className="h-3.5 w-3.5" />
+                          Build
+                        </>
+                      )}
+                    </Button>
                   )}
-                </Button>
+                  
+                  {/* Built badge */}
+                  {isBuilt && !deployMutation.isPending && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
+                          <Package className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                          <span className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300">Built</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        <p>Images pre-built and ready</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  
+                  {/* Spin Up button */}
+                  <Button
+                    size="sm"
+                    className="flex-1 h-9 text-xs gap-1.5 font-semibold bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white border-0 shadow-md shadow-cyan-500/20 hover:shadow-lg hover:shadow-cyan-500/30 transition-all"
+                    onClick={handleSpinUpClick}
+                    disabled={isLoading}
+                  >
+                    {deployMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Deploying...
+                      </>
+                    ) : (
+                      <>
+                        <Rocket className="h-3.5 w-3.5" />
+                        Spin Up
+                      </>
+                    )}
+                  </Button>
+                </div>
               )}
             </div>
           </CardContent>

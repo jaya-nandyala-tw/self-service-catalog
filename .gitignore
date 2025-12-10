@@ -193,3 +193,12 @@
 **/*.local
 **/.turbo/
 
+# ===========================
+# Runtime Data
+# ===========================
+**/port_mappings.json
+.backend.log
+.frontend.log
+.backend.pid
+.frontend.pid
+
