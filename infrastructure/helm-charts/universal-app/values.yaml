@@ -1,0 +1,126 @@
+# Universal App Helm Chart - Default Values
+# This chart deploys a variable number of microservices based on a JSON manifest
+
+global:
+  # Application name - used for labeling and naming resources
+  appName: "my-app"
+  
+  # Common labels applied to all resources
+  labels: {}
+  
+  # Image pull secrets for private registries
+  imagePullSecrets: []
+  
+  # Default image registry
+  imageRegistry: "localhost:5000"
+
+# List of application components to deploy
+# Each component becomes a Deployment + Service
+components: []
+  # Example component configuration:
+  # - name: "frontend"
+  #   image: "localhost:5000/myapp-frontend:latest"
+  #   port: 3000
+  #   type: "frontend"  # frontend = creates Ingress, backend = ClusterIP only
+  #   replicas: 1
+  #   env: []
+  #   resources:
+  #     requests:
+  #       memory: "128Mi"
+  #       cpu: "100m"
+  #     limits:
+  #       memory: "256Mi"
+  #       cpu: "200m"
+  #   healthCheck:
+  #     enabled: true
+  #     path: "/health"
+  #   configMap: {}
+  #   secrets: {}
+
+# Default component settings (applied if not specified per-component)
+componentDefaults:
+  replicas: 1
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  healthCheck:
+    enabled: true
+    path: "/health"
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# Ingress configuration for frontend components
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  
+  # TLS configuration
+  tls:
+    enabled: false
+    secretName: ""
+  
+  # Host configuration - if empty, uses appName.local
+  host: ""
+
+# Database configurations
+databases:
+  # PostgreSQL database (uses Bitnami chart as subchart)
+  postgresql:
+    enabled: false
+    auth:
+      username: "app"
+      password: "changeme"
+      database: "appdb"
+    primary:
+      persistence:
+        enabled: true
+        size: "8Gi"
+    # For MVP, we also support a simple StatefulSet mode
+    useStatefulSet: false
+    
+  # Simple PostgreSQL StatefulSet (built-in, no external chart)
+  simplePostgresql:
+    enabled: false
+    image: "postgres:15-alpine"
+    storage: "5Gi"
+    storageClassName: ""
+    auth:
+      username: "app"
+      password: "changeme"
+      database: "appdb"
+
+# Service account configuration
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+
+# Container security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+
+# Network policies
+networkPolicy:
+  enabled: false
+  
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+

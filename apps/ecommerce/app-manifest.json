@@ -1,0 +1,25 @@
+{
+  "appName": "E-Commerce Platform",
+  "description": "A full-stack e-commerce application with React frontend, FastAPI backend, and Celery workers",
+  "components": [
+    {
+      "name": "web-ui",
+      "type": "frontend",
+      "path": "./frontend",
+      "port": 3000
+    },
+    {
+      "name": "api-server",
+      "type": "backend",
+      "path": "./backend",
+      "port": 8080
+    },
+    {
+      "name": "task-processor",
+      "type": "worker",
+      "path": "./worker",
+      "port": 5555
+    }
+  ]
+}
+

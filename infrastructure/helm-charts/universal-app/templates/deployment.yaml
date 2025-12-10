@@ -1,0 +1,104 @@
+{{/*
+  Deployment template - Creates a Deployment for each component defined in values.yaml
+  Uses range to iterate over components list
+*/}}
+{{- range $index, $component := .Values.components }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $.Values.global.appName }}-{{ $component.name }}
+  labels:
+    {{- include "universal-app.componentLabels" (dict "root" $ "component" $component) | nindent 4 }}
+spec:
+  replicas: {{ $component.replicas | default $.Values.componentDefaults.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "universal-app.componentSelectorLabels" (dict "root" $ "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "universal-app.componentSelectorLabels" (dict "root" $ "component" $component) | nindent 8 }}
+      {{- if $component.podAnnotations }}
+      annotations:
+        {{- toYaml $component.podAnnotations | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with $.Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "universal-app.serviceAccountName" $ }}
+      securityContext:
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ $component.name }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ $component.image }}"
+          imagePullPolicy: {{ $component.imagePullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: {{ $component.port }}
+              protocol: TCP
+          {{- if or (and $.Values.componentDefaults.healthCheck.enabled (not (hasKey $component "healthCheck"))) (and (hasKey $component "healthCheck") $component.healthCheck.enabled) }}
+          {{- $healthPath := ($component.healthCheck).path | default $.Values.componentDefaults.healthCheck.path | default "/health" }}
+          livenessProbe:
+            httpGet:
+              path: {{ $healthPath }}
+              port: http
+            initialDelaySeconds: {{ ($component.healthCheck).initialDelaySeconds | default $.Values.componentDefaults.healthCheck.initialDelaySeconds | default 10 }}
+            periodSeconds: {{ ($component.healthCheck).periodSeconds | default $.Values.componentDefaults.healthCheck.periodSeconds | default 10 }}
+            timeoutSeconds: {{ ($component.healthCheck).timeoutSeconds | default $.Values.componentDefaults.healthCheck.timeoutSeconds | default 5 }}
+            failureThreshold: {{ ($component.healthCheck).failureThreshold | default $.Values.componentDefaults.healthCheck.failureThreshold | default 3 }}
+          readinessProbe:
+            httpGet:
+              path: {{ $healthPath }}
+              port: http
+            initialDelaySeconds: {{ ($component.healthCheck).initialDelaySeconds | default $.Values.componentDefaults.healthCheck.initialDelaySeconds | default 10 }}
+            periodSeconds: {{ ($component.healthCheck).periodSeconds | default $.Values.componentDefaults.healthCheck.periodSeconds | default 10 }}
+            timeoutSeconds: {{ ($component.healthCheck).timeoutSeconds | default $.Values.componentDefaults.healthCheck.timeoutSeconds | default 5 }}
+            failureThreshold: {{ ($component.healthCheck).failureThreshold | default $.Values.componentDefaults.healthCheck.failureThreshold | default 3 }}
+          {{- end }}
+          {{- if or $component.env (or $.Values.databases.postgresql.enabled $.Values.databases.simplePostgresql.enabled) }}
+          env:
+            {{- if $component.env }}
+            {{- toYaml $component.env | nindent 12 }}
+            {{- end }}
+            {{- if or $.Values.databases.postgresql.enabled $.Values.databases.simplePostgresql.enabled }}
+            - name: DATABASE_URL
+              value: {{ include "universal-app.postgresConnectionString" $ | quote }}
+            {{- end }}
+          {{- end }}
+          {{- if $component.envFrom }}
+          envFrom:
+            {{- toYaml $component.envFrom | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- if $component.resources }}
+            {{- toYaml $component.resources | nindent 12 }}
+            {{- else }}
+            {{- toYaml $.Values.componentDefaults.resources | nindent 12 }}
+            {{- end }}
+          {{- if $component.volumeMounts }}
+          volumeMounts:
+            {{- toYaml $component.volumeMounts | nindent 12 }}
+          {{- end }}
+      {{- if $component.volumes }}
+      volumes:
+        {{- toYaml $component.volumes | nindent 8 }}
+      {{- end }}
+      {{- with $component.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $component.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $component.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+

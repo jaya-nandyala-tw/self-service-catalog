@@ -1,0 +1,39 @@
+{
+  "appName": "Social Platform",
+  "description": "A microservices-based social platform with user management and post services, each backed by its own PostgreSQL database",
+  "components": [
+    {
+      "name": "web-app",
+      "type": "frontend",
+      "path": "./frontend",
+      "port": 3000
+    },
+    {
+      "name": "user-service",
+      "type": "backend",
+      "path": "./user-service",
+      "port": 8001,
+      "dependencies": ["users-db"]
+    },
+    {
+      "name": "post-service",
+      "type": "backend",
+      "path": "./post-service",
+      "port": 8002,
+      "dependencies": ["posts-db"]
+    },
+    {
+      "name": "users-db",
+      "type": "database",
+      "path": "./users-db",
+      "port": 5432
+    },
+    {
+      "name": "posts-db",
+      "type": "database",
+      "path": "./posts-db",
+      "port": 5433
+    }
+  ]
+}
+

@@ -1,0 +1,54 @@
+{{/*
+  Ingress template - Creates ONE Ingress resource that routes traffic
+  to all components where type == 'frontend'
+*/}}
+{{- if .Values.ingress.enabled }}
+{{- $frontendComponents := list }}
+{{- range $component := .Values.components }}
+  {{- if eq ($component.type | default "backend") "frontend" }}
+    {{- $frontendComponents = append $frontendComponents $component }}
+  {{- end }}
+{{- end }}
+
+{{- if gt (len $frontendComponents) 0 }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.global.appName }}-ingress
+  labels:
+    {{- include "universal-app.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | default (printf "%s.local" .Values.global.appName) }}
+      {{- if .Values.ingress.tls.secretName }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+      {{- else }}
+      secretName: {{ .Values.global.appName }}-tls
+      {{- end }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | default (printf "%s.local" .Values.global.appName) }}
+      http:
+        paths:
+          {{- range $index, $component := $frontendComponents }}
+          {{- $path := $component.ingressPath | default "/" }}
+          - path: {{ $path }}
+            pathType: {{ $component.ingressPathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ $.Values.global.appName }}-{{ $component.name }}
+                port:
+                  number: {{ $component.servicePort | default $component.port }}
+          {{- end }}
+{{- end }}
+{{- end }}
+

@@ -1,0 +1,64 @@
+🚀 Universal App "{{ .Values.global.appName }}" has been deployed!
+
+{{- $frontendComponents := list }}
+{{- range $component := .Values.components }}
+  {{- if eq ($component.type | default "backend") "frontend" }}
+    {{- $frontendComponents = append $frontendComponents $component }}
+  {{- end }}
+{{- end }}
+
+📦 Deployed Components:
+{{- range $component := .Values.components }}
+  - {{ $component.name }} ({{ $component.type | default "backend" }})
+    Image: {{ $component.image }}
+    Port: {{ $component.port }}
+{{- end }}
+
+{{- if .Values.ingress.enabled }}
+{{- if gt (len $frontendComponents) 0 }}
+
+🌐 Ingress Access:
+  Host: {{ .Values.ingress.host | default (printf "%s.local" .Values.global.appName) }}
+  
+  Frontend endpoints:
+{{- range $component := $frontendComponents }}
+  - http://{{ $.Values.ingress.host | default (printf "%s.local" $.Values.global.appName) }}{{ $component.ingressPath | default "/" }}
+{{- end }}
+
+  💡 Tip: Add the following to /etc/hosts if testing locally:
+     127.0.0.1 {{ .Values.ingress.host | default (printf "%s.local" .Values.global.appName) }}
+{{- end }}
+{{- end }}
+
+{{- if or .Values.databases.postgresql.enabled .Values.databases.simplePostgresql.enabled }}
+
+🗄️ Database:
+{{- if .Values.databases.simplePostgresql.enabled }}
+  Type: PostgreSQL (Simple StatefulSet)
+  Host: {{ include "universal-app.fullname" . }}-postgresql
+  Port: 5432
+  Database: {{ .Values.databases.simplePostgresql.auth.database }}
+  Username: {{ .Values.databases.simplePostgresql.auth.username }}
+{{- else if .Values.databases.postgresql.enabled }}
+  Type: PostgreSQL (Bitnami Chart)
+  Host: {{ .Release.Name }}-postgresql
+  Port: 5432
+  Database: {{ .Values.databases.postgresql.auth.database }}
+  Username: {{ .Values.databases.postgresql.auth.username }}
+{{- end }}
+{{- end }}
+
+📋 Useful Commands:
+
+  # Get all pods
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/part-of={{ .Values.global.appName }}
+
+  # Get all services  
+  kubectl get svc -n {{ .Release.Namespace }} -l app.kubernetes.io/part-of={{ .Values.global.appName }}
+
+  # View logs for a specific component
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name=<component-name> -f
+
+  # Port-forward to a service
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ .Values.global.appName }}-<component-name> <local-port>:<service-port>
+

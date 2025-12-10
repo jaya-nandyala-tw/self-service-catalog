@@ -1,0 +1,13 @@
+{
+  "appName": "Blog Platform",
+  "description": "A simple blog platform with a REST API backend",
+  "components": [
+    {
+      "name": "blog-api",
+      "type": "backend",
+      "path": "./api",
+      "port": 8000
+    }
+  ]
+}
+

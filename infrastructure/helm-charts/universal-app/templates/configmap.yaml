@@ -1,0 +1,19 @@
+{{/*
+  ConfigMap template - Creates ConfigMaps for components that need them
+*/}}
+{{- range $index, $component := .Values.components }}
+{{- if $component.configMap }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $.Values.global.appName }}-{{ $component.name }}-config
+  labels:
+    {{- include "universal-app.componentLabels" (dict "root" $ "component" $component) | nindent 4 }}
+data:
+  {{- range $key, $value := $component.configMap }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+{{- end }}
+{{- end }}
+

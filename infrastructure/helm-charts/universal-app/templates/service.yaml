@@ -1,0 +1,32 @@
+{{/*
+  Service template - Creates a Service for each component defined in values.yaml
+  - Frontend components get LoadBalancer type (configurable)
+  - Backend components get ClusterIP type
+*/}}
+{{- range $index, $component := .Values.components }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $.Values.global.appName }}-{{ $component.name }}
+  labels:
+    {{- include "universal-app.componentLabels" (dict "root" $ "component" $component) | nindent 4 }}
+  {{- if $component.serviceAnnotations }}
+  annotations:
+    {{- toYaml $component.serviceAnnotations | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if eq ($component.type | default "backend") "frontend" }}
+  type: {{ $component.serviceType | default "ClusterIP" }}
+  {{- else }}
+  type: ClusterIP
+  {{- end }}
+  ports:
+    - port: {{ $component.servicePort | default $component.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "universal-app.componentSelectorLabels" (dict "root" $ "component" $component) | nindent 4 }}
+{{- end }}
+

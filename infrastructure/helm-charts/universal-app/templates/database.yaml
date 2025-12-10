@@ -1,0 +1,114 @@
+{{/*
+  Simple PostgreSQL StatefulSet - A built-in database option for MVP
+  This provides a simple PostgreSQL deployment without requiring external charts
+*/}}
+{{- if .Values.databases.simplePostgresql.enabled }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "universal-app.fullname" . }}-postgresql-secret
+  labels:
+    {{- include "universal-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+type: Opaque
+data:
+  POSTGRES_USER: {{ .Values.databases.simplePostgresql.auth.username | b64enc | quote }}
+  POSTGRES_PASSWORD: {{ .Values.databases.simplePostgresql.auth.password | b64enc | quote }}
+  POSTGRES_DB: {{ .Values.databases.simplePostgresql.auth.database | b64enc | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "universal-app.fullname" . }}-postgresql
+  labels:
+    {{- include "universal-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: postgresql
+      protocol: TCP
+      name: postgresql
+  selector:
+    app.kubernetes.io/name: {{ include "universal-app.fullname" . }}-postgresql
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "universal-app.fullname" . }}-postgresql
+  labels:
+    {{- include "universal-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  serviceName: {{ include "universal-app.fullname" . }}-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "universal-app.fullname" . }}-postgresql
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "universal-app.fullname" . }}-postgresql
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: database
+    spec:
+      containers:
+        - name: postgresql
+          image: {{ .Values.databases.simplePostgresql.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: {{ include "universal-app.fullname" . }}-postgresql-secret
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U {{ .Values.databases.simplePostgresql.auth.username }} -d {{ .Values.databases.simplePostgresql.auth.database }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U {{ .Values.databases.simplePostgresql.auth.username }} -d {{ .Values.databases.simplePostgresql.auth.database }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+              subPath: postgres
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- if .Values.databases.simplePostgresql.storageClassName }}
+        storageClassName: {{ .Values.databases.simplePostgresql.storageClassName }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.databases.simplePostgresql.storage }}
+{{- end }}
+
